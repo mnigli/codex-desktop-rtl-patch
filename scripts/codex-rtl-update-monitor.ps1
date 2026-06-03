@@ -13,7 +13,7 @@
 #>
 param(
     [string]$StoreId = '9PLM9XGG6VKS',
-    [string]$InstallerUrl = 'https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/install.ps1',
+    [string]$InstallerUrl = 'https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/092d1744f43a14cc9bb2a5bf05d89ef09723eca1/install.ps1',
     [switch]$CheckOnly,
     [switch]$SkipStoreUpdate,
     [switch]$SkipRtlPatch
