@@ -21,7 +21,8 @@ $AsarPackage = '@electron/asar@4.2.0'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\CodexRtl'
 $TargetAppDir = Join-Path $InstallRoot 'app'
 $StatePath = Join-Path $InstallRoot 'patch-state.json'
-$ScriptPath = $MyInvocation.MyCommand.Path
+$ScriptPath = $null
+try { $ScriptPath = $MyInvocation.MyCommand.Path } catch { $ScriptPath = $null }
 $ThisDir = if ($ScriptPath) { Split-Path -Parent $ScriptPath } else { (Get-Location).Path }
 $PatchJsSource = Join-Path $ThisDir 'src\codex-rtl-patch.js'
 

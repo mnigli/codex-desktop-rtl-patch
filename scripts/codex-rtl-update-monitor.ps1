@@ -25,7 +25,8 @@ $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\CodexRtl'
 $TargetAppDir = Join-Path $InstallRoot 'app'
 $StatePath = Join-Path $InstallRoot 'patch-state.json'
-$ScriptPath = $MyInvocation.MyCommand.Path
+$ScriptPath = $null
+try { $ScriptPath = $MyInvocation.MyCommand.Path } catch { $ScriptPath = $null }
 $RepoRoot = if ($ScriptPath) { Split-Path -Parent (Split-Path -Parent $ScriptPath) } else { $null }
 $LocalInstaller = if ($RepoRoot) { Join-Path $RepoRoot 'install.ps1' } else { $null }
 
