@@ -91,6 +91,50 @@ irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/instal
 The installer mirrors the current official Codex app into the local RTL copy
 and reapplies the patch.
 
+If Codex RTL is still running, the installer will stop and ask you to end the
+Codex task first. On Windows, closing the window with X may leave Electron
+processes running in the background. Use:
+
+```text
+Task Manager > Codex > End task
+```
+
+Then rerun the installer command.
+
+## Automatic Update Monitor
+
+The repository includes an automation-friendly monitor script:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-rtl-update-monitor.ps1
+```
+
+Or run the latest monitor directly from GitHub:
+
+```powershell
+irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/scripts/codex-rtl-update-monitor.ps1 | iex
+```
+
+The monitor:
+
+- checks Microsoft Store for official Codex updates with `winget`
+- installs the official Store update when one is available
+- compares the official Codex version with the local Codex RTL copy
+- reapplies the RTL patch automatically when Codex RTL is not running
+- asks you to use `Task Manager > Codex > End task` when Codex RTL is still open
+
+It uses the Microsoft Store package id for Codex:
+
+```text
+9PLM9XGG6VKS
+```
+
+For a check-only run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-rtl-update-monitor.ps1 -CheckOnly
+```
+
 ## Uninstall
 
 From a clone:

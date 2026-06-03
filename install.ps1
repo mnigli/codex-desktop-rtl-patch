@@ -21,7 +21,6 @@ $AsarPackage = '@electron/asar@4.2.0'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\CodexRtl'
 $TargetAppDir = Join-Path $InstallRoot 'app'
 $StatePath = Join-Path $InstallRoot 'patch-state.json'
-$ShortcutPath = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Codex RTL.lnk'
 $ScriptPath = $MyInvocation.MyCommand.Path
 $ThisDir = if ($ScriptPath) { Split-Path -Parent $ScriptPath } else { (Get-Location).Path }
 $PatchJsSource = Join-Path $ThisDir 'src\codex-rtl-patch.js'
@@ -83,6 +82,29 @@ function Invoke-RobocopyMirror([string]$Source, [string]$Destination) {
     if ($code -gt 7) {
         throw "robocopy failed with exit code $code"
     }
+}
+
+function Get-CodexRtlProcesses {
+    if (-not (Test-Path -LiteralPath $TargetAppDir)) { return @() }
+
+    $target = Resolve-FullPath $TargetAppDir
+    $processes = Get-CimInstance Win32_Process -Filter "name = 'Codex.exe' OR name = 'codex.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.ExecutablePath -and
+            (Resolve-FullPath $_.ExecutablePath).StartsWith(
+                $target,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        }
+    return @($processes)
+}
+
+function Assert-CodexRtlNotRunning {
+    $processes = @(Get-CodexRtlProcesses)
+    if ($processes.Count -eq 0) { return }
+
+    $ids = ($processes | Select-Object -ExpandProperty ProcessId) -join ', '
+    throw "Codex RTL is still running (PID: $ids). Use Task Manager > Codex > End task, then rerun this installer. Closing with X may leave Codex running in the background."
 }
 
 function Remove-TreeBestEffort([string]$Path) {
@@ -212,28 +234,47 @@ function Patch-Asar([string]$AppDir, [string]$Npx) {
     }
 }
 
+function Get-ShortcutDirectories {
+    $dirs = @(
+        [Environment]::GetFolderPath('Desktop'),
+        (Join-Path $env:USERPROFILE 'Desktop'),
+        (Join-Path $env:USERPROFILE 'OneDrive\Desktop'),
+        (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs')
+    ) | Where-Object { $_ -and $_.Trim() } | Select-Object -Unique
+
+    return @($dirs)
+}
+
 function New-CodexShortcut([string]$AppDir) {
     $exe = Join-Path $AppDir 'Codex.exe'
-    if ($DryRun) {
-        Write-Host "DRY RUN create shortcut $ShortcutPath -> $exe"
-        return
-    }
 
-    if (-not (Test-Path -LiteralPath $exe)) {
+    if ((-not $DryRun) -and (-not (Test-Path -LiteralPath $exe))) {
         throw "Patched Codex.exe was not found: $exe"
     }
 
     $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($ShortcutPath)
-    $shortcut.TargetPath = $exe
-    $shortcut.WorkingDirectory = $AppDir
     $icon = Join-Path $AppDir 'resources\icon.ico'
-    if (Test-Path -LiteralPath $icon) {
-        $shortcut.IconLocation = $icon
+    $iconLocation = if (Test-Path -LiteralPath $icon) { $icon } else { "$exe,0" }
+
+    foreach ($dir in Get-ShortcutDirectories) {
+        $path = Join-Path $dir 'Codex RTL.lnk'
+        if ($DryRun) {
+            Write-Host "DRY RUN create shortcut $path -> $exe"
+            continue
+        }
+
+        if (-not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+
+        $shortcut = $shell.CreateShortcut($path)
+        $shortcut.TargetPath = $exe
+        $shortcut.WorkingDirectory = $AppDir
+        $shortcut.IconLocation = $iconLocation
+        $shortcut.Description = 'Codex Desktop with local RTL patch'
+        $shortcut.Save()
+        Write-Ok "Created shortcut: $path"
     }
-    $shortcut.Description = 'Codex Desktop with local RTL patch'
-    $shortcut.Save()
-    Write-Ok "Created shortcut: $ShortcutPath"
 }
 
 function Save-State([object]$Package, [string]$SourceAppDir) {
@@ -268,6 +309,9 @@ $npx = Get-NpxCommand
 Write-Ok "Using npx: $npx"
 
 Assert-UnderPath $TargetAppDir $InstallRoot
+if (-not $DryRun) {
+    Assert-CodexRtlNotRunning
+}
 
 Write-Step 'Copying Codex to a local patchable folder'
 Write-Host "Target: $TargetAppDir"
