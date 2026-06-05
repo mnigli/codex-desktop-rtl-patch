@@ -17,10 +17,14 @@ Run this PowerShell command:
 
 irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/scripts/codex-rtl-update-monitor.ps1 | iex
 
-The monitor script checks Microsoft Store through winget, installs the official
-Codex Store update when one is available, detects recent Microsoft Store/AppX
-update failures for Codex, compares the official Codex version with the local
-Codex RTL copy, and reapplies the RTL patch when safe.
+The monitor script checks an optional external release signal for
+@CodexReleases on X, checks Microsoft Store through winget, installs the
+official Codex Store update when one is available, detects recent Microsoft
+Store/AppX update failures for Codex, compares the official Codex version with
+the local Codex RTL copy, and reapplies the RTL patch when safe.
+
+Treat the X check as an early signal only. X does not provide a stable public
+unauthenticated feed, so Microsoft Store/AppX remains the source of truth.
 
 If the script says Codex RTL is still running, tell the user to use:
 

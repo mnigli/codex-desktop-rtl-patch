@@ -117,6 +117,7 @@ irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/script
 
 The monitor:
 
+- checks an optional external release signal for `@CodexReleases` on X
 - checks Microsoft Store for official Codex updates with `winget`
 - installs the official Store update when one is available
 - detects recent Microsoft Store/AppX update failures for Codex
@@ -134,6 +135,14 @@ For a check-only run:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-rtl-update-monitor.ps1 -CheckOnly
+```
+
+The X check is a best-effort early signal only. X does not provide a stable
+public unauthenticated feed, so the Store/AppX checks remain the source of
+truth. To disable the external release signal:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\codex-rtl-update-monitor.ps1 -SkipReleaseSignal
 ```
 
 ## Uninstall

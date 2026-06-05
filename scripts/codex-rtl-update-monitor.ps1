@@ -14,7 +14,9 @@
 param(
     [string]$StoreId = '9PLM9XGG6VKS',
     [string]$InstallerUrl = 'https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/092d1744f43a14cc9bb2a5bf05d89ef09723eca1/install.ps1',
+    [string[]]$ReleaseSignalUrls = @('https://r.jina.ai/https://x.com/CodexReleases'),
     [switch]$CheckOnly,
+    [switch]$SkipReleaseSignal,
     [switch]$SkipStoreUpdate,
     [switch]$SkipRtlPatch
 )
@@ -25,6 +27,7 @@ $ErrorActionPreference = 'Stop'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'OpenAI\CodexRtl'
 $TargetAppDir = Join-Path $InstallRoot 'app'
 $StatePath = Join-Path $InstallRoot 'patch-state.json'
+$ReleaseSignalStatePath = Join-Path $InstallRoot 'release-signal-state.json'
 $ScriptPath = $null
 try { $ScriptPath = $MyInvocation.MyCommand.Path } catch { $ScriptPath = $null }
 $RepoRoot = if ($ScriptPath) { Split-Path -Parent (Split-Path -Parent $ScriptPath) } else { $null }
@@ -148,6 +151,94 @@ function Get-RecentFailedCodexStoreUpdate([version]$InstalledVersion, [int]$Look
         Select-Object -First 1
 }
 
+function Get-ReleaseSignalState {
+    if (-not (Test-Path -LiteralPath $ReleaseSignalStatePath)) {
+        return $null
+    }
+
+    try {
+        return Get-Content -LiteralPath $ReleaseSignalStatePath -Raw | ConvertFrom-Json
+    } catch {
+        Write-Warn "Could not read release signal state: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Save-ReleaseSignalState([version]$Version, [string]$SourceUrl) {
+    New-Item -ItemType Directory -Force $InstallRoot | Out-Null
+    $state = [ordered]@{
+        lastSeenVersion = [string]$Version
+        lastSeenAt = (Get-Date).ToString('o')
+        sourceUrl = $SourceUrl
+    }
+    $json = $state | ConvertTo-Json -Depth 5
+    $utf8NoBom = New-Object System.Text.UTF8Encoding -ArgumentList $false
+    [System.IO.File]::WriteAllText($ReleaseSignalStatePath, $json + "`n", $utf8NoBom)
+}
+
+function Get-HighestVersionFromText([string]$Text) {
+    if (-not $Text) { return $null }
+
+    $versions = foreach ($match in [regex]::Matches($Text, '(?<!\d)(\d{1,3}\.\d{1,4}\.\d{1,5}\.\d{1,5})(?!\d)')) {
+        try {
+            [version]$match.Groups[1].Value
+        } catch {
+            continue
+        }
+    }
+
+    $items = @($versions)
+    if ($items.Count -eq 0) { return $null }
+    return $items | Sort-Object -Descending | Select-Object -First 1
+}
+
+function Test-ReleaseSignal([version]$InstalledVersion) {
+    if ($SkipReleaseSignal) {
+        return [pscustomobject]@{ Newer = $false; ShouldNotify = $false; Version = $null; SourceUrl = $null }
+    }
+
+    $bestVersion = $null
+    $bestSource = $null
+
+    foreach ($url in $ReleaseSignalUrls) {
+        if (-not $url) { continue }
+
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $url -TimeoutSec 30
+            $version = Get-HighestVersionFromText $response.Content
+            if ($version -and ((-not $bestVersion) -or ($version -gt $bestVersion))) {
+                $bestVersion = $version
+                $bestSource = $url
+            }
+        } catch {
+            Write-Warn "Release signal check failed for ${url}: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $bestVersion) {
+        Write-Ok 'Release signal did not expose a desktop version; continuing with Store/AppX checks.'
+        return [pscustomobject]@{ Newer = $false; ShouldNotify = $false; Version = $null; SourceUrl = $null }
+    }
+
+    if ($bestVersion -le $InstalledVersion) {
+        Write-Ok "Release signal latest desktop version is $bestVersion."
+        Save-ReleaseSignalState $bestVersion $bestSource
+        return [pscustomobject]@{ Newer = $false; ShouldNotify = $false; Version = $bestVersion; SourceUrl = $bestSource }
+    }
+
+    $state = Get-ReleaseSignalState
+    $lastSeen = $null
+    if ($state -and $state.lastSeenVersion) {
+        try { $lastSeen = [version]$state.lastSeenVersion } catch { $lastSeen = $null }
+    }
+
+    Save-ReleaseSignalState $bestVersion $bestSource
+    $shouldNotify = (-not $lastSeen) -or ($bestVersion -gt $lastSeen)
+
+    Write-Warn "Release signal mentions Codex $bestVersion, but installed Codex is $InstalledVersion."
+    return [pscustomobject]@{ Newer = $true; ShouldNotify = $shouldNotify; Version = $bestVersion; SourceUrl = $bestSource }
+}
+
 function Get-RtlState {
     if (-not (Test-Path -LiteralPath $StatePath)) {
         return $null
@@ -187,6 +278,10 @@ function Invoke-RtlInstaller {
 }
 
 $script:Winget = Get-WingetCommand
+
+Write-Step 'Checking external Codex release signal'
+$pkgBeforeStoreCheck = Get-CodexPackage
+$releaseSignal = Test-ReleaseSignal ([version]$pkgBeforeStoreCheck.Version)
 
 Write-Step 'Checking Microsoft Store for Codex updates'
 $storeCheck = Test-WingetUpgradeAvailable $StoreId
@@ -242,6 +337,7 @@ Write-Host "Codex RTL copy:  $rtlVersion"
 
 if ($officialVersion -le $rtlVersion) {
     if ($failedStoreUpdate) { exit 30 }
+    if ($releaseSignal.Newer -and $releaseSignal.ShouldNotify) { exit 31 }
     Write-Ok 'Codex RTL is up to date.'
     exit 0
 }
