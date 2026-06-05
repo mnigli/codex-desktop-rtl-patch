@@ -20,8 +20,9 @@ irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/script
 The monitor script checks an optional external release signal for
 @CodexReleases on X, checks Microsoft Store through winget, installs the
 official Codex Store update when one is available, detects recent Microsoft
-Store/AppX update failures for Codex, compares the official Codex version with
-the local Codex RTL copy, and reapplies the RTL patch when safe.
+Store/AppX update failures for Codex, detects Store updates that were staged
+but still need Codex to be ended/reopened, compares the official Codex version
+with the local Codex RTL copy, and reapplies the RTL patch when safe.
 
 Treat the X check as an early signal only. X does not provide a stable public
 unauthenticated feed, so Microsoft Store/AppX remains the source of truth.
@@ -37,6 +38,11 @@ If the script reports that Microsoft Store attempted a newer Codex version but
 AppX deployment failed, notify the user with the attempted version and tell them
 to retry the Store update after ending the Codex task. If it fails again, suggest
 repairing/resetting Microsoft Store and App Installer.
+
+If the script reports that Microsoft Store staged a newer Codex version but the
+registered app is still older, tell the user to use Task Manager > Codex > End
+task, then reopen Codex Original. After it opens on the new version, rerun the
+monitor/installer so Codex RTL can be repatched.
 
 If there is no update and Codex RTL is current, do not send a message.
 ```

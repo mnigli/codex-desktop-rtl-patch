@@ -151,6 +151,50 @@ function Get-RecentFailedCodexStoreUpdate([version]$InstalledVersion, [int]$Look
         Select-Object -First 1
 }
 
+function Get-RecentStagedCodexStoreUpdate([version]$InstalledVersion, [int]$LookbackHours = 24) {
+    try {
+        $events = Get-WinEvent -FilterHashtable @{
+            LogName = 'Microsoft-Windows-AppXDeploymentServer/Operational'
+            Id = 400
+            StartTime = (Get-Date).AddHours(-$LookbackHours)
+        } -ErrorAction Stop | Where-Object {
+            $_.Message -match 'OpenAI\.Codex_' -and
+            $_.Message -match 'Deployment Stage operation' -and
+            $_.Message -match 'finished successfully'
+        }
+    } catch {
+        Write-Warn "Could not inspect AppX stage logs: $($_.Exception.Message)"
+        return $null
+    }
+
+    $candidates = foreach ($event in $events) {
+        $matches = [regex]::Matches($event.Message, 'OpenAI\.Codex_(\d+\.\d+\.\d+\.\d+)_')
+        foreach ($match in $matches) {
+            try {
+                $version = [version]$match.Groups[1].Value
+            } catch {
+                continue
+            }
+
+            if ($version -gt $InstalledVersion) {
+                [pscustomobject]@{
+                    Version = $version
+                    TimeCreated = $event.TimeCreated
+                    EventId = $event.Id
+                }
+            }
+        }
+    }
+
+    $items = @($candidates)
+    if ($items.Count -eq 0) { return $null }
+
+    return $items |
+        Sort-Object @{ Expression = 'Version'; Descending = $true },
+                    @{ Expression = 'TimeCreated'; Descending = $true } |
+        Select-Object -First 1
+}
+
 function Get-ReleaseSignalState {
     if (-not (Test-Path -LiteralPath $ReleaseSignalStatePath)) {
         return $null
@@ -307,8 +351,14 @@ if ($storeCheck.Available) {
 Write-Step 'Comparing official Codex and Codex RTL versions'
 $pkg = Get-CodexPackage
 $officialVersion = [version]$pkg.Version
+$stagedStoreUpdate = Get-RecentStagedCodexStoreUpdate $officialVersion
+if ($stagedStoreUpdate) {
+    Write-Warn "Microsoft Store staged Codex $($stagedStoreUpdate.Version) successfully at $($stagedStoreUpdate.TimeCreated), but the registered app is still $officialVersion."
+    Write-Warn 'Use Task Manager > Codex > End task, then reopen Codex Original so Windows can switch to the staged version.'
+}
+
 $failedStoreUpdate = Get-RecentFailedCodexStoreUpdate $officialVersion
-if ($failedStoreUpdate) {
+if ($failedStoreUpdate -and ((-not $stagedStoreUpdate) -or ($failedStoreUpdate.Version -gt $stagedStoreUpdate.Version))) {
     Write-Warn "Microsoft Store attempted to update Codex to $($failedStoreUpdate.Version), but AppX deployment failed at $($failedStoreUpdate.TimeCreated) (event $($failedStoreUpdate.EventId))."
     Write-Warn "Installed Codex is still $officialVersion. Retry the Store update after using Task Manager > Codex > End task. If it fails again, repair/reset Microsoft Store and App Installer."
 }
@@ -336,6 +386,7 @@ Write-Host "Official Codex: $officialVersion"
 Write-Host "Codex RTL copy:  $rtlVersion"
 
 if ($officialVersion -le $rtlVersion) {
+    if ($stagedStoreUpdate) { exit 32 }
     if ($failedStoreUpdate) { exit 30 }
     if ($releaseSignal.Newer -and $releaseSignal.ShouldNotify) { exit 31 }
     Write-Ok 'Codex RTL is up to date.'

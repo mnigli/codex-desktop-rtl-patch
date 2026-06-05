@@ -121,6 +121,7 @@ The monitor:
 - checks Microsoft Store for official Codex updates with `winget`
 - installs the official Store update when one is available
 - detects recent Microsoft Store/AppX update failures for Codex
+- detects Store updates that were staged but still need Codex to be ended/reopened
 - compares the official Codex version with the local Codex RTL copy
 - reapplies the RTL patch automatically when Codex RTL is not running
 - asks you to use `Task Manager > Codex > End task` when Codex RTL is still open
