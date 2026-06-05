@@ -5,7 +5,7 @@ This project can be monitored from a Codex recurring automation.
 Recommended schedule:
 
 ```text
-Every 6 hours
+Every 24 hours
 ```
 
 Recommended automation prompt:
@@ -18,8 +18,9 @@ Run this PowerShell command:
 irm https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/main/scripts/codex-rtl-update-monitor.ps1 | iex
 
 The monitor script checks Microsoft Store through winget, installs the official
-Codex Store update when one is available, compares the official Codex version
-with the local Codex RTL copy, and reapplies the RTL patch when safe.
+Codex Store update when one is available, detects recent Microsoft Store/AppX
+update failures for Codex, compares the official Codex version with the local
+Codex RTL copy, and reapplies the RTL patch when safe.
 
 If the script says Codex RTL is still running, tell the user to use:
 
@@ -27,6 +28,11 @@ Task Manager > Codex > End task
 
 Do not tell the user to close Codex with X, because Electron processes can
 remain running in the background and lock app.asar.
+
+If the script reports that Microsoft Store attempted a newer Codex version but
+AppX deployment failed, notify the user with the attempted version and tell them
+to retry the Store update after ending the Codex task. If it fails again, suggest
+repairing/resetting Microsoft Store and App Installer.
 
 If there is no update and Codex RTL is current, do not send a message.
 ```
