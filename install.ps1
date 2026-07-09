@@ -89,7 +89,7 @@ function Get-CodexRtlProcesses {
     if (-not (Test-Path -LiteralPath $TargetAppDir)) { return @() }
 
     $target = Resolve-FullPath $TargetAppDir
-    $processes = Get-CimInstance Win32_Process -Filter "name = 'Codex.exe' OR name = 'codex.exe'" -ErrorAction SilentlyContinue |
+    $processes = Get-CimInstance Win32_Process -Filter "name = 'Codex.exe' OR name = 'codex.exe' OR name = 'ChatGPT.exe'" -ErrorAction SilentlyContinue |
         Where-Object {
             $_.ExecutablePath -and
             (Resolve-FullPath $_.ExecutablePath).StartsWith(
@@ -106,6 +106,17 @@ function Assert-CodexRtlNotRunning {
 
     $ids = ($processes | Select-Object -ExpandProperty ProcessId) -join ', '
     throw "Codex RTL is still running (PID: $ids). Use Task Manager > Codex > End task, then rerun this installer. Closing with X may leave Codex running in the background."
+}
+
+function Get-CodexLauncherPath([string]$AppDir) {
+    foreach ($name in @('ChatGPT.exe', 'Codex.exe')) {
+        $candidate = Join-Path $AppDir $name
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    return (Join-Path $AppDir 'Codex.exe')
 }
 
 function Remove-TreeBestEffort([string]$Path) {
@@ -247,10 +258,10 @@ function Get-ShortcutDirectories {
 }
 
 function New-CodexShortcut([string]$AppDir) {
-    $exe = Join-Path $AppDir 'Codex.exe'
+    $exe = Get-CodexLauncherPath $AppDir
 
     if ((-not $DryRun) -and (-not (Test-Path -LiteralPath $exe))) {
-        throw "Patched Codex.exe was not found: $exe"
+        throw "Patched Codex launcher was not found: $exe"
     }
 
     $shell = New-Object -ComObject WScript.Shell
@@ -276,6 +287,26 @@ function New-CodexShortcut([string]$AppDir) {
         $shortcut.Save()
         Write-Ok "Created shortcut: $path"
     }
+}
+
+function Set-CodexRtlUserDataDirectory([string]$AppDir) {
+    if ($DryRun) { return }
+
+    $ini = Join-Path $AppDir 'resources\owl-app.ini'
+    if (-not (Test-Path -LiteralPath $ini)) {
+        Write-Warn "Owl app config was not found: $ini"
+        return
+    }
+
+    $content = Get-Content -LiteralPath $ini -Raw
+    if ($content -match '(?m)^UserDataDirectoryName=') {
+        $content = $content -replace '(?m)^UserDataDirectoryName=.*$', 'UserDataDirectoryName=CodexRtl'
+    } else {
+        $content = $content.TrimEnd() + [Environment]::NewLine + 'UserDataDirectoryName=CodexRtl' + [Environment]::NewLine
+    }
+
+    Set-Content -LiteralPath $ini -Value $content -NoNewline
+    Write-Ok "Configured Codex RTL user data directory: $ini"
 }
 
 function Save-State([object]$Package, [string]$SourceAppDir) {
@@ -317,6 +348,7 @@ if (-not $DryRun) {
 Write-Step 'Copying Codex to a local patchable folder'
 Write-Host "Target: $TargetAppDir"
 Invoke-RobocopyMirror $sourceAppDir $TargetAppDir
+Set-CodexRtlUserDataDirectory $TargetAppDir
 
 Patch-Asar $TargetAppDir $npx
 New-CodexShortcut $TargetAppDir
@@ -332,5 +364,5 @@ if ($DryRun) {
 }
 
 if ($Launch -and -not $DryRun) {
-    Start-Process -FilePath (Join-Path $TargetAppDir 'Codex.exe') -WorkingDirectory $TargetAppDir
+    Start-Process -FilePath (Get-CodexLauncherPath $TargetAppDir) -WorkingDirectory $TargetAppDir
 }

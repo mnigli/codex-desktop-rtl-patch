@@ -298,7 +298,7 @@ function Get-RtlState {
 
 function Get-RtlProcesses {
     $target = [System.IO.Path]::GetFullPath($TargetAppDir).TrimEnd('\')
-    Get-CimInstance Win32_Process -Filter "name = 'Codex.exe' OR name = 'codex.exe'" -ErrorAction SilentlyContinue |
+    Get-CimInstance Win32_Process -Filter "name = 'Codex.exe' OR name = 'codex.exe' OR name = 'ChatGPT.exe'" -ErrorAction SilentlyContinue |
         Where-Object {
             $_.ExecutablePath -and
             [System.IO.Path]::GetFullPath($_.ExecutablePath).StartsWith(
