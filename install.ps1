@@ -257,6 +257,93 @@ function Get-ShortcutDirectories {
     return @($dirs)
 }
 
+function New-CodexRtlIcon([string]$AppDir) {
+    if ($DryRun) { return $null }
+
+    $iconPath = Join-Path $AppDir 'resources\codex-rtl.ico'
+    $iconDir = Split-Path -Parent $iconPath
+    if (-not (Test-Path -LiteralPath $iconDir)) {
+        New-Item -ItemType Directory -Path $iconDir -Force | Out-Null
+    }
+
+    Add-Type -AssemblyName System.Drawing
+
+    $size = 256
+    $bitmap = New-Object System.Drawing.Bitmap $size, $size
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+
+    try {
+        $rect = New-Object System.Drawing.Rectangle 0, 0, $size, $size
+        $background = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, ([System.Drawing.Color]::FromArgb(18, 26, 45)), ([System.Drawing.Color]::FromArgb(16, 143, 190)), 135
+        $graphics.FillRectangle($background, $rect)
+        $background.Dispose()
+
+        $accent = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, ([System.Drawing.Color]::FromArgb(67, 223, 180)), ([System.Drawing.Color]::FromArgb(56, 135, 255)), 35
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $path.AddEllipse(20, 20, 216, 216)
+        $graphics.FillPath($accent, $path)
+        $accent.Dispose()
+
+        $inner = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(24, 30, 48))
+        $graphics.FillEllipse($inner, 42, 42, 172, 172)
+        $inner.Dispose()
+
+        $arrowPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(255, 255, 255, 255)), 18
+        $arrowPen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $arrowPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $graphics.DrawLine($arrowPen, 158, 91, 91, 91)
+        $graphics.DrawLine($arrowPen, 91, 91, 118, 64)
+        $graphics.DrawLine($arrowPen, 91, 91, 118, 118)
+        $graphics.DrawLine($arrowPen, 166, 151, 99, 151)
+        $graphics.DrawLine($arrowPen, 99, 151, 126, 124)
+        $graphics.DrawLine($arrowPen, 99, 151, 126, 178)
+        $arrowPen.Dispose()
+
+        $font = New-Object System.Drawing.Font 'Segoe UI', 34, ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Pixel)
+        $textBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 255, 255))
+        $format = New-Object System.Drawing.StringFormat
+        $format.Alignment = [System.Drawing.StringAlignment]::Center
+        $format.LineAlignment = [System.Drawing.StringAlignment]::Center
+        $textRect = New-Object System.Drawing.RectangleF 0, 180, $size, 46
+        $graphics.DrawString('RTL', $font, $textBrush, $textRect, $format)
+        $format.Dispose()
+        $textBrush.Dispose()
+        $font.Dispose()
+
+        $pngStream = New-Object System.IO.MemoryStream
+        $bitmap.Save($pngStream, [System.Drawing.Imaging.ImageFormat]::Png)
+        $pngBytes = $pngStream.ToArray()
+        $pngStream.Dispose()
+
+        $file = [System.IO.File]::Create($iconPath)
+        $writer = New-Object System.IO.BinaryWriter $file
+        try {
+            $writer.Write([UInt16]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]1)
+            $writer.Write([Byte]0)
+            $writer.Write([Byte]0)
+            $writer.Write([Byte]0)
+            $writer.Write([Byte]0)
+            $writer.Write([UInt16]1)
+            $writer.Write([UInt16]32)
+            $writer.Write([UInt32]$pngBytes.Length)
+            $writer.Write([UInt32]22)
+            $writer.Write($pngBytes)
+        } finally {
+            $writer.Dispose()
+            $file.Dispose()
+        }
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
+
+    return $iconPath
+}
+
 function New-CodexShortcut([string]$AppDir) {
     $exe = Get-CodexLauncherPath $AppDir
 
@@ -265,7 +352,10 @@ function New-CodexShortcut([string]$AppDir) {
     }
 
     $shell = New-Object -ComObject WScript.Shell
-    $icon = Join-Path $AppDir 'resources\icon.ico'
+    $icon = New-CodexRtlIcon $AppDir
+    if (-not $icon) {
+        $icon = Join-Path $AppDir 'resources\codex-rtl.ico'
+    }
     $iconLocation = if (Test-Path -LiteralPath $icon) { $icon } else { "$exe,0" }
 
     foreach ($dir in Get-ShortcutDirectories) {
