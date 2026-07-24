@@ -13,7 +13,7 @@
 #>
 param(
     [string]$StoreId = '9PLM9XGG6VKS',
-    [string]$InstallerUrl = 'https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/092d1744f43a14cc9bb2a5bf05d89ef09723eca1/install.ps1',
+    [string]$InstallerUrl = 'https://raw.githubusercontent.com/mnigli/codex-desktop-rtl-patch/daac6f347b8629d0e937749e4284b11ea8bab0d0/install.ps1',
     [string[]]$ReleaseSignalUrls = @('https://r.jina.ai/https://x.com/CodexReleases'),
     [switch]$CheckOnly,
     [switch]$SkipReleaseSignal,
